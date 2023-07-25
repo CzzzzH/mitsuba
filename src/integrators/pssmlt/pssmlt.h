@@ -38,6 +38,7 @@ MTS_NAMESPACE_BEGIN
 struct PSSMLTConfiguration {
     PathSampler::ETechnique technique;
     int maxDepth;
+    int seed;
     bool directSampling;
     int rrDepth;
     bool separateDirect;
@@ -55,7 +56,7 @@ struct PSSMLTConfiguration {
     int firstStageSizeReduction;
     size_t timeout;
     ref<Bitmap> importanceMap;
-
+    
     inline PSSMLTConfiguration() { }
 
     void dump() const {

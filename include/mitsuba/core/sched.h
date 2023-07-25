@@ -156,6 +156,8 @@ public:
     virtual void process(const WorkUnit *workUnit, WorkResult *workResult,
         const bool &stop) = 0;
 
+    virtual void pssmlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_pt, const bool &stop) {}
+
     MTS_DECLARE_CLASS()
 protected:
     /// Virtual destructor
@@ -253,6 +255,8 @@ public:
      */
     virtual void processResult(const WorkResult *result,
         bool cancelled) = 0;
+    
+    virtual void pssmlt_processResult(const WorkResult *result, WorkResult **result_extra, bool cancelled) {}
 
     /**
      * \brief Called when the parallel process is canceled by
@@ -528,6 +532,7 @@ public:
         ref<WorkProcessor> wp;
         ref<WorkUnit> workUnit;
         ref<WorkResult> workResult;
+        ref<WorkResult> workResultExtra[10];
         bool stop;
 
         inline Item() : id(-1), workerIndex(-1), coreOffset(-1),
@@ -594,7 +599,8 @@ protected:
     inline void releaseWork(Item &item) {
         ProcessRecord *rec = item.rec;
         try {
-            item.proc->processResult(item.workResult, item.stop);
+            // item.proc->processResult(item.workResult, item.stop);
+            item.proc->pssmlt_processResult(item.workResult, (WorkResult**)(&item.workResultExtra[0]), item.stop);
         } catch (const std::exception &ex) {
             Log(EWarn, "Caught an exception - canceling process %i: %s",
                 item.id, ex.what());
@@ -638,6 +644,8 @@ protected:
             item.wp->prepare();
             item.workUnit = item.wp->createWorkUnit();
             item.workResult = item.wp->createWorkResult();
+            for (int i = 0; i < 10; i++)
+                item.workResultExtra[i] = item.wp->createWorkResult();
         } catch (std::exception &) {
             throw;
         }

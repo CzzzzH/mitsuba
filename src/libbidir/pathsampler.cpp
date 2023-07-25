@@ -52,6 +52,8 @@ PathSampler::PathSampler(ETechnique technique, const Scene *scene, Sampler *sens
     /* Go one extra step if there are emitters that can be intersected */
     if (!m_scene->hasDegenerateEmitters() && m_sensorDepth != -1)
         ++m_sensorDepth;
+
+    m_sensorSampler->is_sensor = true;
 }
 
 PathSampler::~PathSampler() {
@@ -290,6 +292,8 @@ void PathSampler::sampleSplats(const Point2i &offset, SplatList &list) {
                     samplePos.x += offset.x;
                     samplePos.y += offset.y;
                 }
+
+                // printf("Sample position: %f %f", samplePos.x, samplePos.y);
 
                 RayDifferential sensorRay;
                 Spectrum value = sensor->sampleRayDifferential(

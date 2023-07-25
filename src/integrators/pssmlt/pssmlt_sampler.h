@@ -33,6 +33,7 @@ MTS_NAMESPACE_BEGIN
  */
 class PSSMLTSampler : public Sampler {
 public:
+
     // Construct a new MLT sampler
     PSSMLTSampler(const PSSMLTConfiguration &conf);
 

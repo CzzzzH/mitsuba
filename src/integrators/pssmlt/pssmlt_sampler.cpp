@@ -21,7 +21,7 @@
 MTS_NAMESPACE_BEGIN
 
 PSSMLTSampler::PSSMLTSampler(const PSSMLTConfiguration &config) : Sampler(Properties()) {
-    m_random = new Random();
+    m_random = new Random(config.seed);
     m_s1 = config.mutationSizeLow;
     m_s2 = config.mutationSizeHigh;
     configure();
@@ -81,18 +81,36 @@ void PSSMLTSampler::reject() {
 }
 
 Float PSSMLTSampler::primarySample(size_t i) {
-    while (i >= m_u.size())
-        m_u.push_back(SampleStruct(m_random->nextFloat()));
 
+    while (i >= m_u.size()) {
+        // if (is_sensor) {
+        //     m_u.push_back(SampleStruct(m_random->nextFloat() / 10.0f));
+        // } else {
+        //     m_u.push_back(SampleStruct(m_random->nextFloat()));
+        // }
+        m_u.push_back(SampleStruct(m_random->nextFloat()));
+    }
+    
     if (m_u[i].modify < m_time) {
         if (m_largeStep) {
             m_backup.push_back(std::pair<size_t, SampleStruct>(i, m_u[i]));
             m_u[i].modify = m_time;
-            m_u[i].value = m_random->nextFloat();
+
+            if (is_sensor) {
+                m_u[i].value = m_random->nextFloat() / 2.0f;
+            } else {
+                m_u[i].value = m_random->nextFloat();
+            }
+
         } else {
             if (m_u[i].modify < m_largeStepTime) {
                 m_u[i].modify = m_largeStepTime;
-                m_u[i].value = m_random->nextFloat();
+
+                if (is_sensor) {
+                    m_u[i].value = m_random->nextFloat() / 2.0f;
+                } else {
+                    m_u[i].value = m_random->nextFloat();
+                }
             }
 
             while (m_u[i].modify + 1 < m_time) {

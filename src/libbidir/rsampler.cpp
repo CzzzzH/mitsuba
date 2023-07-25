@@ -20,9 +20,10 @@
 
 MTS_NAMESPACE_BEGIN
 
-ReplayableSampler::ReplayableSampler() : Sampler(Properties()) {
-    m_initial = new Random();
-    m_random = new Random();
+ReplayableSampler::ReplayableSampler(uint64_t seed) : Sampler(Properties()) {
+    m_seed = seed;
+    m_initial = new Random(m_seed);
+    m_random = new Random(m_seed);
     m_random->set(m_initial);
     m_sampleCount = 0;
     m_sampleIndex = 0;
@@ -46,7 +47,7 @@ void ReplayableSampler::serialize(Stream *stream, InstanceManager *manager) cons
 }
 
 ref<Sampler> ReplayableSampler::clone() {
-    ref<ReplayableSampler> sampler = new ReplayableSampler();
+    ref<ReplayableSampler> sampler = new ReplayableSampler(m_seed);
     sampler->m_sampleCount = m_sampleCount;
     sampler->m_sampleIndex = m_sampleIndex;
     sampler->m_initial->set(m_initial);

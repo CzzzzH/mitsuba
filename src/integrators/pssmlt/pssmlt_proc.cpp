@@ -18,6 +18,7 @@
 
 #include <mitsuba/bidir/util.h>
 #include <mitsuba/bidir/path.h>
+#include <boost/filesystem.hpp>
 #include "pssmlt_proc.h"
 #include "pssmlt_sampler.h"
 
@@ -83,10 +84,21 @@ public:
         m_pathSampler = new PathSampler(m_config.technique, m_scene,
             m_emitterSampler, m_sensorSampler, m_directSampler, m_config.maxDepth,
             m_config.rrDepth, m_config.separateDirect, m_config.directSampling);
+        
     }
 
-    void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {
+    void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {}
+
+    void pssmlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_extra, const bool &stop) {
+
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
+        ImageBlock *result_pt = static_cast<ImageBlock *>(workResult_extra[0]);
+        ImageBlock *result_proposed_map = static_cast<ImageBlock *>(workResult_extra[1]);
+        ImageBlock *result_accept_map = static_cast<ImageBlock *>(workResult_extra[2]);
+        ImageBlock *result_pt_map = static_cast<ImageBlock *>(workResult_extra[3]);
+        ImageBlock *result_dist_map = static_cast<ImageBlock *>(workResult_extra[4]);
+        Bitmap *dist_map_data = result_dist_map->getBitmap();
+
         const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
         const PathSeed &seed = wu->getSeed();
         SplatList *current = new SplatList(), *proposed = new SplatList();
@@ -180,11 +192,36 @@ public:
             }
 
             cumulativeWeight += currentWeight;
+
+            // Addtional output
+            for (size_t k=0; k<proposed->size(); ++k) {
+                if (largeStep) {
+                    Spectrum value = proposed->getValue(k) * proposed->luminance;
+                    Spectrum unit = Spectrum(1.0f);
+                    result_pt_map->put(proposed->getPosition(k), &unit[0]);
+                    if (!value.isZero()) {
+                        result_pt->put(proposed->getPosition(k), &value[0]);
+                    }
+                } else if (accept) {
+                    Point2i p(int(current->getPosition(k)[0] + 2.0f), int(current->getPosition(k)[1]) + 2.0f);
+                    Float old_dist = dist_map_data->getPixel(p)[0];
+                    Float new_dist = distance(proposed->getPosition(k), current->getPosition(k));
+                    if (new_dist > old_dist)
+                        dist_map_data->setPixel(p, Spectrum(new_dist));
+                    // dist_map_data->setPixel(p, Spectrum(old_dist) + Spectrum(1.0f) / (Float) m_config.nMutations); // For test
+                }
+                Spectrum unit = Spectrum(1.0f) / (Float) m_config.nMutations;
+                result_proposed_map->put(proposed->getPosition(k), &unit[0]);
+            }
+
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
                     Spectrum value = current->getValue(k) * cumulativeWeight;
-                    if (!value.isZero())
+                    if (!value.isZero()) {
                         result->put(current->getPosition(k), &value[0]);
+                    }
+                    Spectrum unit = Spectrum(1.0f) / (Float) m_config.nMutations;
+                    result_accept_map->put(proposed->getPosition(k), &unit[0]);
                 }
 
                 cumulativeWeight = proposedWeight;
@@ -205,8 +242,9 @@ public:
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
                     Spectrum value = proposed->getValue(k) * proposedWeight;
-                    if (!value.isZero())
+                    if (!value.isZero()) {
                         result->put(proposed->getPosition(k), &value[0]);
+                    }
                 }
 
                 m_sensorSampler->reject();
@@ -226,7 +264,6 @@ public:
             if (!value.isZero())
                 result->put(current->getPosition(k), &value[0]);
         }
-
 
         delete current;
         delete proposed;
@@ -275,6 +312,11 @@ void PSSMLTProcess::develop() {
     LockGuard lock(m_resultMutex);
     size_t pixelCount = m_accum->getBitmap()->getPixelCount();
     const Spectrum *accum = (Spectrum *) m_accum->getBitmap()->getData();
+
+    // Extra
+    Spectrum *accum_pt = (Spectrum *) m_accum_extra[0]->getBitmap()->getData();
+    Spectrum *accum_pt_map = (Spectrum *) m_accum_extra[3]->getBitmap()->getData();
+
     const Spectrum *direct = m_directImage != NULL ?
         (Spectrum *) m_directImage->getData() : NULL;
     const Float *importanceMap = m_config.importanceMap != NULL ?
@@ -283,6 +325,7 @@ void PSSMLTProcess::develop() {
 
     /* Compute the luminance correction factor */
     Float avgLuminance = 0;
+
     if (importanceMap) {
         for (size_t i=0; i<pixelCount; ++i)
             avgLuminance += accum[i].getLuminance() * importanceMap[i];
@@ -294,25 +337,81 @@ void PSSMLTProcess::develop() {
     avgLuminance /= (Float) pixelCount;
     Float luminanceFactor = m_config.luminance / avgLuminance;
 
-    for (size_t i=0; i<pixelCount; ++i) {
+    for (size_t i = 0; i < pixelCount; ++i) {
         Float correction = luminanceFactor;
         if (importanceMap)
             correction *= importanceMap[i];
         Spectrum value = accum[i] * correction;
+        accum_pt[i] = accum_pt[i] / accum_pt_map[i];
+
         if (direct)
             value += direct[i];
+            
         target[i] = value;
     }
+
+    // Normalize extra output
+    // Float max_proposed = 0, max_accept = 0;
+    // for (size_t i = 0; i < pixelCount; ++i) {
+    //     if (accum_proposed_map[i][0] > max_proposed) 
+    //         max_proposed = accum_proposed_map[i][0];
+    //     if (accum_accept_map[i][0] > max_accept) 
+    //         max_accept = accum_accept_map[i][0];
+    // }
+
+    // for (size_t i = 0; i < pixelCount; ++i) {
+    //     accum_proposed_map[i] /= max_proposed;
+    //     accum_accept_map[i] /= max_accept;
+    // }
+
+    // Save extra output
+    Log(EInfo, "Develop extra film");
+    const Scene* scene = m_job->getScene();
+    fs::path P = scene->getDestinationFile();
+    fs::path pt_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_pt" + P.extension().string());
+    fs::path proposed_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_proposed_map" + P.extension().string());
+    fs::path accept_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_accept_map" + P.extension().string());
+    fs::path dist_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_dist_map" + P.extension().string());
+    m_film->setDestinationFile(pt_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[0]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(proposed_map_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[1]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(accept_map_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[2]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(dist_map_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[5]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
+
     m_film->setBitmap(m_developBuffer);
     m_refreshTimer->reset();
-
     m_queue->signalRefresh(m_job);
 }
 
-void PSSMLTProcess::processResult(const WorkResult *wr, bool cancelled) {
+void PSSMLTProcess::pssmlt_processResult(const WorkResult *wr, WorkResult **wr_ex, bool cancelled) {
     LockGuard lock(m_resultMutex);
     const ImageBlock *result = static_cast<const ImageBlock *>(wr);
     m_accum->put(result);
+    for (int i = 0; i < 10; ++i) {
+        if (i == 5) {
+            size_t pixelCount = m_accum_extra[i]->getBitmap()->getPixelCount();
+            Spectrum *accum = (Spectrum *) m_accum_extra[i]->getBitmap()->getData();
+            Spectrum *last_accum = (Spectrum *) m_accum_extra[i - 1]->getBitmap()->getData();
+            for (size_t j = 0; j < pixelCount; ++j) {
+                Spectrum accum_value = accum[j];
+                Spectrum last_accum_value = last_accum[j];
+                if (last_accum_value[0] > accum_value[0])
+                    accum[j] = last_accum_value;
+            }
+            m_accum_extra[i - 1]->clear();
+        } else {
+            const ImageBlock *temp_result = static_cast<const ImageBlock *>(wr_ex[i]);
+            m_accum_extra[i]->put(temp_result);
+        }
+    }
     m_progress->update(++m_resultCounter);
     m_refreshTimeout = std::min(2000U, m_refreshTimeout * 2);
 
@@ -347,6 +446,10 @@ void PSSMLTProcess::bindResource(const std::string &name, int id) {
         m_progress = new ProgressReporter("Rendering", m_config.workUnits, m_job);
         m_accum = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
         m_accum->clear();
+        for (int i = 0; i < 10; ++i) {
+            m_accum_extra[i] = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
+            m_accum_extra[i]->clear();
+        }
         m_developBuffer = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, m_film->getCropSize());
     }
 }

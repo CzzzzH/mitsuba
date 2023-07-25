@@ -293,7 +293,9 @@ public:
                 return false;
         }
 
-        ref<ReplayableSampler> rplSampler = new ReplayableSampler();
+        uint32_t seed = sampler->m_seed;
+        
+        ref<ReplayableSampler> rplSampler = new ReplayableSampler(seed);
         ref<PathSampler> pathSampler = new PathSampler(PathSampler::EBidirectional, scene,
             rplSampler, rplSampler, rplSampler, m_config.maxDepth, 10,
             m_config.separateDirect, true);

@@ -38,7 +38,7 @@ MTS_NAMESPACE_BEGIN
 class MTS_EXPORT_BIDIR ReplayableSampler : public Sampler {
 public:
     /// Construct a new sampler
-    ReplayableSampler();
+    ReplayableSampler(uint64_t seed);
 
     /// Unserialize a sampler
     ReplayableSampler(Stream *stream, InstanceManager *manager);
@@ -86,6 +86,9 @@ public:
     inline void updateSampleIndex(size_t index) { m_sampleIndex = index; }
 
     MTS_DECLARE_CLASS()
+
+    uint64_t m_seed;
+
 protected:
     /// Virtual destructor
     virtual ~ReplayableSampler();

@@ -649,7 +649,8 @@ LocalWorker::~LocalWorker() {
 void LocalWorker::run() {
     while (acquireWork(true) != Scheduler::EStop) {
         try {
-            m_schedItem.wp->process(m_schedItem.workUnit, m_schedItem.workResult, m_schedItem.stop);
+            m_schedItem.wp->pssmlt_process(m_schedItem.workUnit, m_schedItem.workResult, (WorkResult**)(&m_schedItem.workResultExtra[0]), m_schedItem.stop);
+            // m_schedItem.wp->process(m_schedItem.workUnit, m_schedItem.workResult, m_schedItem.stop);
         } catch (const std::exception &ex) {
             m_schedItem.stop = true;
             releaseWork(m_schedItem);

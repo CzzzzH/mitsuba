@@ -162,6 +162,10 @@ public:
     virtual void serialize(Stream *stream, InstanceManager *manager) const;
 
     MTS_DECLARE_CLASS()
+
+    uint64_t m_seed;
+    bool is_sensor = false;
+    
 protected:
     /// Construct a new sampler
     Sampler(const Properties &props);

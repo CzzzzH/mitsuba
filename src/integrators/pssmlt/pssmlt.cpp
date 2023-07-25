@@ -347,7 +347,10 @@ public:
         }
 
         std::vector<PathSeed> pathSeeds;
-        ref<ReplayableSampler> rplSampler = new ReplayableSampler();
+        uint64_t seed = sampler->m_seed;
+        m_config.seed = seed;
+
+        ref<ReplayableSampler> rplSampler = new ReplayableSampler(seed);
         ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             rplSampler, rplSampler, rplSampler, m_config.maxDepth, m_config.rrDepth,
             m_config.separateDirect, m_config.directSampling);
