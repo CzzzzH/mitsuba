@@ -164,8 +164,12 @@ public:
     MTS_DECLARE_CLASS()
 
     uint64_t m_seed;
+    double* m_sample_weight;
+    std::string m_sample_map_path;
     bool is_sensor = false;
-    
+    bool adaptive = false;
+    int width, height;
+
 protected:
     /// Construct a new sampler
     Sampler(const Properties &props);
