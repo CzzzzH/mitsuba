@@ -244,6 +244,12 @@ public:
 
         /* Stop MLT after X seconds -- useful for equal-time comparisons */
         m_config.timeout = props.getInteger("timeout", 0);
+
+        m_config.sampleMapPath = props.getString("sampleMapPath", "-");
+        if (m_config.sampleMapPath != "-") {
+            fs::path filePath = Thread::getThread()->getFileResolver()->resolve(m_config.sampleMapPath);
+            m_config.sampleMapPath = filePath.string();
+        }
     }
 
     /// Unserialize from a binary data stream
@@ -349,7 +355,9 @@ public:
         std::vector<PathSeed> pathSeeds;
         uint64_t seed = sampler->m_seed;
         m_config.seed = seed;
-
+        m_config.width = cropSize.x;
+        m_config.height = cropSize.y;
+        
         ref<ReplayableSampler> rplSampler = new ReplayableSampler(seed);
         ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             rplSampler, rplSampler, rplSampler, m_config.maxDepth, m_config.rrDepth,

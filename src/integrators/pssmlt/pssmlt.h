@@ -21,6 +21,7 @@
 
 #include <mitsuba/bidir/pathsampler.h>
 #include <mitsuba/core/bitmap.h>
+#include <mitsuba/core/fresolver.h>
 
 /// Use Kelemen-style mutations in random number space?
 #define KELEMEN_STYLE_MUTATIONS 1
@@ -39,6 +40,9 @@ struct PSSMLTConfiguration {
     PathSampler::ETechnique technique;
     int maxDepth;
     int seed;
+    int width;
+    int height;
+    std::string sampleMapPath;
     bool directSampling;
     int rrDepth;
     bool separateDirect;

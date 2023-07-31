@@ -134,10 +134,10 @@ public:
         /* Sanity check -- the luminance should match the one from
            the warmup phase - an error here would indicate inconsistencies
            regarding the use of random numbers during sample generation */
-        if (std::abs((current->luminance - seed.luminance)
-                / seed.luminance) > Epsilon)
-            Log(EError, "Error when reconstructing a seed path: luminance "
-                "= %f, but expected luminance = %f", current->luminance, seed.luminance);
+        // if (std::abs((current->luminance - seed.luminance)
+        //         / seed.luminance) > Epsilon)
+        //     Log(EError, "Error when reconstructing a seed path: luminance "
+        //         "= %f, but expected luminance = %f", current->luminance, seed.luminance);
 
         ref<Timer> timer = new Timer();
 

@@ -17,6 +17,8 @@
 */
 
 #include "pssmlt_sampler.h"
+#include <iostream>
+#include <fstream>
 
 MTS_NAMESPACE_BEGIN
 
@@ -24,6 +26,9 @@ PSSMLTSampler::PSSMLTSampler(const PSSMLTConfiguration &config) : Sampler(Proper
     m_random = new Random(config.seed);
     m_s1 = config.mutationSizeLow;
     m_s2 = config.mutationSizeHigh;
+    m_width = config.width;
+    m_height = config.height;
+    m_sample_map_path = config.sampleMapPath;
     configure();
 }
 
@@ -31,6 +36,22 @@ PSSMLTSampler::PSSMLTSampler(PSSMLTSampler *sampler) : Sampler(Properties()),
     m_random(sampler->m_random) {
     m_s1 = sampler->m_s1;
     m_s2 = sampler->m_s2;
+    m_sample_map_path = sampler->m_sample_map_path;
+    m_width = sampler->m_width;
+    m_height = sampler->m_height;
+
+    if (m_sample_map_path != "-") {
+        adaptive = true;
+        size_t size = m_width * m_height;
+        sample_weight.resize(size);
+        std::ifstream infile(m_sample_map_path.c_str(), std::ios::in | std::ios::binary);
+        // if (!infile.is_open())
+        //     std::cout << "failed to open " << m_sample_map_path << '\n';
+        infile.read(reinterpret_cast<char*>(&sample_weight[0]), size * sizeof(double));
+        infile.close();
+        // printf("Sample Weight Check: %f \t %f\n", sample_weight[0], sample_weight[size - 1]);
+    }
+
     configure();
 }
 
@@ -83,11 +104,6 @@ void PSSMLTSampler::reject() {
 Float PSSMLTSampler::primarySample(size_t i) {
 
     while (i >= m_u.size()) {
-        // if (is_sensor) {
-        //     m_u.push_back(SampleStruct(m_random->nextFloat() / 10.0f));
-        // } else {
-        //     m_u.push_back(SampleStruct(m_random->nextFloat()));
-        // }
         m_u.push_back(SampleStruct(m_random->nextFloat()));
     }
     
@@ -95,21 +111,16 @@ Float PSSMLTSampler::primarySample(size_t i) {
         if (m_largeStep) {
             m_backup.push_back(std::pair<size_t, SampleStruct>(i, m_u[i]));
             m_u[i].modify = m_time;
-
+            m_u[i].value = m_random->nextFloat();
             if (is_sensor) {
-                m_u[i].value = m_random->nextFloat() / 2.0f;
-            } else {
-                m_u[i].value = m_random->nextFloat();
+                current_adaptive = true;
             }
-
         } else {
             if (m_u[i].modify < m_largeStepTime) {
                 m_u[i].modify = m_largeStepTime;
-
+                m_u[i].value = m_random->nextFloat();
                 if (is_sensor) {
-                    m_u[i].value = m_random->nextFloat() / 2.0f;
-                } else {
-                    m_u[i].value = m_random->nextFloat();
+                    current_adaptive = true;
                 }
             }
 
@@ -141,9 +152,31 @@ Float PSSMLTSampler::next1D() {
 }
 
 Point2 PSSMLTSampler::next2D() {
+
     /// Enforce a specific order of evaluation
     Float value1 = primarySample(m_sampleIndex++);
     Float value2 = primarySample(m_sampleIndex++);
+
+    if (adaptive && current_adaptive) {
+        current_adaptive = false;    
+        Float target = m_random->nextFloat();
+        int low = 0, high = m_width * m_height;
+        while (low < high) {
+            int mid = (low + high) >> 1;
+            if (sample_weight[mid] < target)
+                low = mid + 1;
+            else
+                high = mid;
+        }
+        Float row = low / m_width + m_random->nextFloat();
+        Float col = low % m_width + m_random->nextFloat();
+        Float row_norm = row / m_height;
+        Float col_norm = col / m_width;
+        m_u[m_sampleIndex - 2].value = col_norm;
+        m_u[m_sampleIndex - 1].value = row_norm;
+        return Point2(col_norm, row_norm);
+    }
+
     return Point2(value1, value2);
 }
 
