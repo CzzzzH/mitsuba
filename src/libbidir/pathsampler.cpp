@@ -52,8 +52,6 @@ PathSampler::PathSampler(ETechnique technique, const Scene *scene, Sampler *sens
     /* Go one extra step if there are emitters that can be intersected */
     if (!m_scene->hasDegenerateEmitters() && m_sensorDepth != -1)
         ++m_sensorDepth;
-
-    m_sensorSampler->is_sensor = true;
 }
 
 PathSampler::~PathSampler() {

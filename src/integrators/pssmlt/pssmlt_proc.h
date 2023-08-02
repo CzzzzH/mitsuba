@@ -47,6 +47,9 @@ public:
     EStatus generateWork(WorkUnit *unit, int worker);
 
     MTS_DECLARE_CLASS()
+
+    std::vector<double> sample_pdf;
+
 protected:
     /// Virtual destructor
     virtual ~PSSMLTProcess() { }

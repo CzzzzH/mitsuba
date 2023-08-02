@@ -144,6 +144,8 @@ public:
         /* MLT main loop */
         Float cumulativeWeight = 0;
         current->normalize(m_config.importanceMap);
+        m_pathSampler->m_sensorSampler->is_sensor = true;
+
         for (uint64_t mutationCtr=0; mutationCtr<m_config.nMutations && !stop; ++mutationCtr) {
             if (wu->getTimeout() > 0 && (mutationCtr % 8192) == 0
                     && (int) timer->getMilliseconds() > wu->getTimeout())
@@ -302,6 +304,15 @@ PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     m_resultCounter = 0;
     m_workCounter = 0;
     m_refreshTimeout = 1;
+
+    // Load Sample map's PDF
+    int size = conf.width * conf.height;
+    sample_pdf.resize(size);
+    std::ifstream infile_pdf(conf.sampleMapPath.c_str(), std::ios::in | std::ios::binary);
+    // if (!infile_pdf.is_open())
+    //     std::cout << "failed to open " << conf.sampleMapPath << std::endl;
+    infile_pdf.read(reinterpret_cast<char*>(&sample_pdf[0]), size * sizeof(double));
+    infile_pdf.close();
 }
 
 ref<WorkProcessor> PSSMLTProcess::createWorkProcessor() const {
@@ -338,10 +349,12 @@ void PSSMLTProcess::develop() {
     Float luminanceFactor = m_config.luminance / avgLuminance;
 
     for (size_t i = 0; i < pixelCount; ++i) {
+
         Float correction = luminanceFactor;
         if (importanceMap)
             correction *= importanceMap[i];
-        Spectrum value = accum[i] * correction;
+        Float sample_coeff = 1.0f / (sample_pdf[i] * pixelCount);
+        Spectrum value = accum[i] * correction * sample_coeff;
         accum_pt[i] = accum_pt[i] / accum_pt_map[i];
 
         if (direct)

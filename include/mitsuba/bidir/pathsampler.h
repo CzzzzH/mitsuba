@@ -187,6 +187,8 @@ public:
 
     /// Return the underlying memory pool
     inline MemoryPool &getMemoryPool() { return m_pool; }
+    
+    ref<Sampler> m_sensorSampler;
 
     MTS_DECLARE_CLASS()
 protected:
@@ -197,7 +199,6 @@ protected:
     ref<const Scene> m_scene;
     ref<SamplingIntegrator> m_integrator;
     ref<Sampler> m_emitterSampler;
-    ref<Sampler> m_sensorSampler;
     ref<Sampler> m_directSampler;
     int m_maxDepth;
     int m_rrDepth;
