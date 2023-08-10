@@ -40,23 +40,20 @@ PSSMLTSampler::PSSMLTSampler(PSSMLTSampler *sampler) : Sampler(Properties()),
     m_width = sampler->m_width;
     m_height = sampler->m_height;
 
-    if (m_sample_map_path != "-") {
-        adaptive = true;    
-        size_t size = m_width * m_height;
-        std::string sample_map_path_pdf = m_sample_map_path;
+    // Load sample map's CDF
+    std::string sample_map_path_pdf = m_sample_map_path;
+    if (sample_map_path_pdf.find("_pdf") != std::string::npos) {
         std::string sample_map_path_cdf = sample_map_path_pdf.replace(sample_map_path_pdf.find("_pdf"), 4, "_cdf");
-
-        // Load sample map's CDF
-        sample_weight.resize(size);
         std::ifstream infile_cdf(sample_map_path_cdf.c_str(), std::ios::in | std::ios::binary);
-        // if (!infile_cdf.is_open())
-        //     std::cout << "failed to open " << sample_map_path_cdf << std::endl;
-        infile_cdf.read(reinterpret_cast<char*>(&sample_weight[0]), size * sizeof(double));
-        infile_cdf.close();
-        
-        // printf("Sample Weight Check: %f \t %f\n", sample_weight[0], sample_weight[size - 1]);
+        if (infile_cdf.is_open()) {
+            adaptive = true;
+            size_t size = m_width * m_height;
+            sample_weight.resize(size);
+            infile_cdf.read(reinterpret_cast<char*>(&sample_weight[0]), size * sizeof(double));
+            infile_cdf.close();
+        } 
     }
-
+    
     configure();
 }
 

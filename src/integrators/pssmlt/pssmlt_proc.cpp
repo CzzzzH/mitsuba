@@ -306,13 +306,13 @@ PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     m_refreshTimeout = 1;
 
     // Load Sample map's PDF
-    int size = conf.width * conf.height;
-    sample_pdf.resize(size);
     std::ifstream infile_pdf(conf.sampleMapPath.c_str(), std::ios::in | std::ios::binary);
-    // if (!infile_pdf.is_open())
-    //     std::cout << "failed to open " << conf.sampleMapPath << std::endl;
-    infile_pdf.read(reinterpret_cast<char*>(&sample_pdf[0]), size * sizeof(double));
-    infile_pdf.close();
+    if (infile_pdf.is_open()) {
+        int size = conf.width * conf.height;
+        sample_pdf.resize(size);
+        infile_pdf.read(reinterpret_cast<char*>(&sample_pdf[0]), size * sizeof(double));
+        infile_pdf.close();
+    }
 }
 
 ref<WorkProcessor> PSSMLTProcess::createWorkProcessor() const {
@@ -353,8 +353,15 @@ void PSSMLTProcess::develop() {
         Float correction = luminanceFactor;
         if (importanceMap)
             correction *= importanceMap[i];
-        Float sample_coeff = 1.0f / (sample_pdf[i] * pixelCount);
-        Spectrum value = accum[i] * correction * sample_coeff;
+        Spectrum value;
+
+        if (sample_pdf.size() > 0) {
+            Float sample_coeff = 1.0f / (sample_pdf[i] * pixelCount);
+            value = accum[i] * correction * sample_coeff;
+        } else {
+            value = accum[i] * correction;
+        }
+
         accum_pt[i] = accum_pt[i] / accum_pt_map[i];
 
         if (direct)
