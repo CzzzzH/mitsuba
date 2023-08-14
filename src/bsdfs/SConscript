@@ -1,5 +1,8 @@
 Import('env', 'plugins')
 
+# OpenRooms material
+plugins += env.SharedLibrary('microfacet', ['openrooms_microfacet.cpp'])
+
 # Basic library of smooth and rough materials
 plugins += env.SharedLibrary('diffuse', ['diffuse.cpp'])
 plugins += env.SharedLibrary('dielectric', ['dielectric.cpp'])
