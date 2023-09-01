@@ -42,7 +42,6 @@ struct PSSMLTConfiguration {
     int seed;
     int width;
     int height;
-    std::string sampleMapPath;
     bool directSampling;
     int rrDepth;
     bool separateDirect;
@@ -61,6 +60,10 @@ struct PSSMLTConfiguration {
     size_t timeout;
     ref<Bitmap> importanceMap;
     
+    // Extra
+    std::string sampleMapPath;
+    std::string importanceMapPath;
+
     inline PSSMLTConfiguration() { }
 
     void dump() const {

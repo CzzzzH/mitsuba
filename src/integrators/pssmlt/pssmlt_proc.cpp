@@ -327,6 +327,7 @@ void PSSMLTProcess::develop() {
     // Extra
     Spectrum *accum_pt = (Spectrum *) m_accum_extra[0]->getBitmap()->getData();
     Spectrum *accum_pt_map = (Spectrum *) m_accum_extra[3]->getBitmap()->getData();
+    Spectrum *importance_map_output = (Spectrum *) m_accum_extra[6]->getBitmap()->getData();
 
     const Spectrum *direct = m_directImage != NULL ?
         (Spectrum *) m_directImage->getData() : NULL;
@@ -338,8 +339,10 @@ void PSSMLTProcess::develop() {
     Float avgLuminance = 0;
 
     if (importanceMap) {
-        for (size_t i=0; i<pixelCount; ++i)
+        for (size_t i=0; i<pixelCount; ++i) {
             avgLuminance += accum[i].getLuminance() * importanceMap[i];
+            importance_map_output[i] = Spectrum(importanceMap[i]);
+        }
     } else {
         for (size_t i=0; i<pixelCount; ++i)
             avgLuminance += accum[i].getLuminance();
@@ -404,8 +407,14 @@ void PSSMLTProcess::develop() {
     m_film->setDestinationFile(dist_map_path, scene->getBlockSize());
     m_film->setBitmap(m_accum_extra[5]->getBitmap());
     m_film->develop(scene, 0.f);
-    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
+    
+    // Test
+    // fs::path importance_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_importance_map" + P.extension().string());
+    // m_film->setDestinationFile(importance_map_path, scene->getBlockSize());
+    // m_film->setBitmap(m_accum_extra[6]->getBitmap());
+    // m_film->develop(scene, 0.f);
 
+    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
     m_film->setBitmap(m_developBuffer);
     m_refreshTimer->reset();
     m_queue->signalRefresh(m_job);
