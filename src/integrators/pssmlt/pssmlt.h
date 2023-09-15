@@ -21,6 +21,7 @@
 
 #include <mitsuba/bidir/pathsampler.h>
 #include <mitsuba/core/bitmap.h>
+#include <mitsuba/core/fresolver.h>
 
 /// Use Kelemen-style mutations in random number space?
 #define KELEMEN_STYLE_MUTATIONS 1
@@ -55,6 +56,9 @@ struct PSSMLTConfiguration {
     int firstStageSizeReduction;
     size_t timeout;
     ref<Bitmap> importanceMap;
+
+    // Extra
+    std::string importanceMapPath;
 
     inline PSSMLTConfiguration() { }
 

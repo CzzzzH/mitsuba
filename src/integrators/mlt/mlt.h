@@ -22,6 +22,7 @@
 #include <mitsuba/core/bitmap.h>
 #include <mitsuba/bidir/manifold.h>
 #include <mitsuba/bidir/mut_manifold.h>
+#include <mitsuba/core/fresolver.h>
 
 MTS_NAMESPACE_BEGIN
 
@@ -52,6 +53,9 @@ struct MLTConfiguration {
     int firstStageSizeReduction;
     ref<Bitmap> importanceMap;
     size_t timeout;
+
+    // Extra
+    std::string importanceMapPath;
 
     inline MLTConfiguration() { }
 

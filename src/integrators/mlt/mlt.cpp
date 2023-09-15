@@ -196,6 +196,12 @@ public:
 
         /* Stop MLT after X seconds -- useful for equal-time comparisons */
         m_config.timeout = props.getInteger("timeout", 0);
+
+        m_config.importanceMapPath = props.getString("importanceMapPath", "-");
+        if (m_config.importanceMapPath != "-") {
+            fs::path filePath = Thread::getThread()->getFileResolver()->resolve(m_config.importanceMapPath);
+            m_config.importanceMapPath = filePath.string();
+        }
     }
 
     /// Unserialize from a binary data stream
@@ -250,6 +256,21 @@ public:
             m_config.importanceMap = BidirectionalUtils::mltLuminancePass(
                     scene, sceneResID, queue, m_config.firstStageSizeReduction,
                     m_nestedJob);
+
+            // Replace importance map
+            std::string importance_map_path = m_config.importanceMapPath;
+            std::ifstream infile(importance_map_path.c_str(), std::ios::in | std::ios::binary);
+            if (infile.is_open()) {
+                size_t size = m_config.importanceMap->getPixelCount();
+                Float *importance_map_data = m_config.importanceMap->getFloatData();
+                importance_map_read.resize(size);
+                infile.read(reinterpret_cast<char*>(&importance_map_read[0]), size * sizeof(double));
+                for (size_t i = 0; i < size; ++i) {
+                    importance_map_data[i] = importance_map_read[i];
+                }
+                infile.close();
+            } 
+
             if (!m_config.importanceMap) {
                 Log(EWarn, "First-stage MLT process failed!");
                 return false;
@@ -330,6 +351,7 @@ private:
     ref<ParallelProcess> m_process;
     ref<RenderJob> m_nestedJob;
     MLTConfiguration m_config;
+    std::vector<double> importance_map_read;
 };
 
 MTS_IMPLEMENT_CLASS_S(MLT, false, Integrator)
