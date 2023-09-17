@@ -124,6 +124,9 @@ public:
     Spectrum Li(const RayDifferential &ray, RadianceQueryRecord &rRec) const {
         Spectrum result(m_undefined);
 
+        if (m_field == EAlbedo)
+            result = Spectrum(1.0f);
+
         if (!rRec.rayIntersect(ray))
             return result;
 
@@ -154,6 +157,8 @@ public:
                 break;
             case EAlbedo:
                 result = its.shape->getBSDF()->getDiffuseReflectance(its);
+                if (result.isZero())
+                    result = Spectrum(1.0f);
                 break;
             case EShapeIndex: {
                     const ref_vector<Shape> &shapes = rRec.scene->getShapes();
