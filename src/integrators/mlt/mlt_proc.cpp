@@ -22,6 +22,7 @@
 #include <mitsuba/bidir/mut_mchain.h>
 #include <mitsuba/bidir/mut_manifold.h>
 #include <mitsuba/bidir/util.h>
+#include <boost/filesystem.hpp>
 #include "mlt_proc.h"
 
 MTS_NAMESPACE_BEGIN
@@ -113,8 +114,14 @@ public:
             Log(EError, "There must be at least one mutator!");
     }
 
-    void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {
+    void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {}
+
+    void mlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_extra, const bool &stop) {
+
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
+        ImageBlock *result_proposed_map = static_cast<ImageBlock *>(workResult_extra[0]);
+        ImageBlock *result_accept_map = static_cast<ImageBlock *>(workResult_extra[1]);
+
         const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
         Path *current = new Path(), *proposed = new Path();
         Spectrum relWeight(0.0f);
@@ -252,12 +259,20 @@ public:
 
                 accumulatedWeight += 1-a;
 
+                // Count proposal
+                Spectrum unit = Spectrum(1.0f);
+                result_proposed_map->put(proposed->getSamplePosition(), &unit[0]);
+
                 /* Accept with probability 'a' */
                 if (a == 1 || m_sampler->next1D() < a) {
                     current->release(muRec.l, muRec.m+1, *m_pool);
                     Spectrum value = relWeight * accumulatedWeight;
                     if (!value.isZero())
                         result->put(current->getSamplePosition(), &value[0]);
+
+                    // Count acceptance
+                    Spectrum unit = Spectrum(1.0f);
+                    result_accept_map->put(proposed->getSamplePosition(), &unit[0]);
 
                     /* The mutation was accepted */
                     std::swap(current, proposed);
@@ -267,6 +282,7 @@ public:
                     accumulatedWeight = a;
                     consecRejections = 0;
                     ++statsAccepted;
+
                 } else {
                     /* The mutation was rejected */
                     proposed->release(muRec.l, muRec.l + muRec.ka + 1, *m_pool);
@@ -374,16 +390,33 @@ void MLTProcess::develop() {
         target[i] = value;
     }
 
+    Log(EInfo, "Develop extra film");
+    const Scene* scene = m_job->getScene();
+    fs::path P = scene->getDestinationFile();
+    fs::path proposed_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_proposed_map" + P.extension().string());
+    fs::path accept_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_accept_map" + P.extension().string());
+    m_film->setDestinationFile(proposed_map_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[0]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(accept_map_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[1]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
+
     m_film->setBitmap(m_developBuffer);
     m_refreshTimer->reset();
 
     m_queue->signalRefresh(m_job);
 }
 
-void MLTProcess::processResult(const WorkResult *wr, bool cancelled) {
+void MLTProcess::mlt_processResult(const WorkResult *wr, WorkResult **wr_ex, bool cancelled) {
     LockGuard lock(m_resultMutex);
     const ImageBlock *result = static_cast<const ImageBlock *>(wr);
     m_accum->put(result);
+    for (int i = 0; i < 2; ++i) {
+        const ImageBlock *temp_result = static_cast<const ImageBlock *>(wr_ex[i]);
+        m_accum_extra[i]->put(temp_result);
+    }
     m_progress->update(++m_resultCounter);
     m_refreshTimeout = std::min(2000U, m_refreshTimeout * 2);
 
@@ -419,6 +452,10 @@ void MLTProcess::bindResource(const std::string &name, int id) {
         m_progress = new ProgressReporter("Rendering", m_config.workUnits, m_job);
         m_accum = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
         m_accum->clear();
+        for (int i = 0; i < 2; ++i) {
+            m_accum_extra[i] = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
+            m_accum_extra[i]->clear();
+        }
         m_developBuffer = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, m_film->getCropSize());
     }
 }

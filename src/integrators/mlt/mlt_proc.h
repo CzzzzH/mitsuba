@@ -41,7 +41,8 @@ public:
     void develop();
 
     /* ParallelProcess impl. */
-    void processResult(const WorkResult *wr, bool cancelled);
+    void processResult(const WorkResult *wr, bool cancelled) {}
+    void mlt_processResult(const WorkResult *wr, WorkResult **wr_ex, bool cancelled);
     ref<WorkProcessor> createWorkProcessor() const;
     void bindResource(const std::string &name, int id);
     EStatus generateWork(WorkUnit *unit, int worker);
@@ -57,6 +58,7 @@ private:
     const Bitmap *m_directImage;
     ref<Bitmap> m_developBuffer;
     ImageBlock *m_accum;
+    ImageBlock *m_accum_extra[2];
     ProgressReporter *m_progress;
     const std::vector<PathSeed> &m_seeds;
     ref<Mutex> m_resultMutex;
