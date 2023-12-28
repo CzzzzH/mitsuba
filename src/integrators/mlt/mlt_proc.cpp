@@ -119,14 +119,16 @@ public:
     void mlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_extra, const bool &stop) {
 
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
-        ImageBlock *result_proposed_map = static_cast<ImageBlock *>(workResult_extra[0]);
-        ImageBlock *result_accept_map = static_cast<ImageBlock *>(workResult_extra[1]);
+        ImageBlock *result_proposal_map = static_cast<ImageBlock *>(workResult_extra[0]);
+        ImageBlock *result_acceptance_map = static_cast<ImageBlock *>(workResult_extra[1]);
 
         const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
         Path *current = new Path(), *proposed = new Path();
         Spectrum relWeight(0.0f);
 
         result->clear();
+        result_proposal_map->clear();
+        result_acceptance_map->clear();
 
         /// Reconstruct the seed path
         m_pathSampler->reconstructPath(wu->getSeed(), m_config.importanceMap, *current);
@@ -260,8 +262,8 @@ public:
                 accumulatedWeight += 1-a;
 
                 // Count proposal
-                Spectrum unit = Spectrum(1.0f);
-                result_proposed_map->put(proposed->getSamplePosition(), &unit[0]);
+                Spectrum unit = Spectrum(0.01f);
+                result_proposal_map->put(proposed->getSamplePosition(), &unit[0]);
 
                 /* Accept with probability 'a' */
                 if (a == 1 || m_sampler->next1D() < a) {
@@ -271,8 +273,8 @@ public:
                         result->put(current->getSamplePosition(), &value[0]);
 
                     // Count acceptance
-                    Spectrum unit = Spectrum(1.0f);
-                    result_accept_map->put(proposed->getSamplePosition(), &unit[0]);
+                    Spectrum unit = Spectrum(0.01f);
+                    result_acceptance_map->put(proposed->getSamplePosition(), &unit[0]);
 
                     /* The mutation was accepted */
                     std::swap(current, proposed);
@@ -295,6 +297,10 @@ public:
             } else {
                 accumulatedWeight += 1;
                 consecRejections++;
+
+                // Count proposal
+                Spectrum unit = Spectrum(0.01f);
+                result_proposal_map->put(current->getSamplePosition(), &unit[0]);
             }
         }
         #if defined(MTS_BD_DEBUG)
@@ -393,8 +399,8 @@ void MLTProcess::develop() {
     Log(EInfo, "Develop extra film");
     const Scene* scene = m_job->getScene();
     fs::path P = scene->getDestinationFile();
-    fs::path proposed_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_proposed_map" + P.extension().string());
-    fs::path accept_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_accept_map" + P.extension().string());
+    fs::path proposed_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_proposal_map" + P.extension().string());
+    fs::path accept_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_acceptance_map" + P.extension().string());
     m_film->setDestinationFile(proposed_map_path, scene->getBlockSize());
     m_film->setBitmap(m_accum_extra[0]->getBitmap());
     m_film->develop(scene, 0.f);
