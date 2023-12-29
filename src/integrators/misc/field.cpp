@@ -127,6 +127,9 @@ public:
         if (!rRec.rayIntersect(ray))
             return result;
 
+        if (m_field == EAlbedo)
+            result = Spectrum(1.0f);
+
         Intersection &its = rRec.its;
 
         switch (m_field) {
@@ -154,6 +157,8 @@ public:
                 break;
             case EAlbedo:
                 result = its.shape->getBSDF()->getDiffuseReflectance(its);
+                if (result.isZero())
+                    result = Spectrum(1.0f);
                 break;
             case EShapeIndex: {
                     const ref_vector<Shape> &shapes = rRec.scene->getShapes();
