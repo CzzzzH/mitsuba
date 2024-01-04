@@ -156,7 +156,9 @@ public:
     virtual void process(const WorkUnit *workUnit, WorkResult *workResult,
         const bool &stop) = 0;
     
-    virtual void mlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_pt, const bool &stop) {}
+    virtual void mlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_pt, const bool &stop) {
+        process(workUnit, workResult, stop);
+    }
 
     MTS_DECLARE_CLASS()
 protected:
@@ -256,7 +258,9 @@ public:
     virtual void processResult(const WorkResult *result,
         bool cancelled) = 0;
 
-    virtual void mlt_processResult(const WorkResult *result, WorkResult **result_extra, bool cancelled) {}
+    virtual void mlt_processResult(const WorkResult *result, WorkResult **result_extra, bool cancelled) {
+        processResult(result, cancelled);
+    }
 
     /**
      * \brief Called when the parallel process is canceled by
