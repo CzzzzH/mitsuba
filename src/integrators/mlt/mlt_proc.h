@@ -58,7 +58,7 @@ private:
     const Bitmap *m_directImage;
     ref<Bitmap> m_developBuffer;
     ImageBlock *m_accum;
-    ImageBlock *m_accum_extra[2];
+    ImageBlock *m_accum_extra[4];
     ProgressReporter *m_progress;
     const std::vector<PathSeed> &m_seeds;
     ref<Mutex> m_resultMutex;

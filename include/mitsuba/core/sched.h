@@ -532,7 +532,7 @@ public:
         ref<WorkProcessor> wp;
         ref<WorkUnit> workUnit;
         ref<WorkResult> workResult;
-        ref<WorkResult> workResultExtra[2];
+        ref<WorkResult> workResultExtra[4];
         bool stop;
 
         inline Item() : id(-1), workerIndex(-1), coreOffset(-1),
@@ -644,7 +644,7 @@ protected:
             item.wp->prepare();
             item.workUnit = item.wp->createWorkUnit();
             item.workResult = item.wp->createWorkResult();
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < 4; i++)
                 item.workResultExtra[i] = item.wp->createWorkResult();
         } catch (std::exception &) {
             throw;

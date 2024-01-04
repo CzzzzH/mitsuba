@@ -119,16 +119,20 @@ public:
     void mlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_extra, const bool &stop) {
 
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
-        ImageBlock *result_proposal_map = static_cast<ImageBlock *>(workResult_extra[0]);
-        ImageBlock *result_acceptance_map = static_cast<ImageBlock *>(workResult_extra[1]);
+        ImageBlock *result_bidirectionalMutation = static_cast<ImageBlock *>(workResult_extra[0]);
+        ImageBlock *result_lensPerturbation= static_cast<ImageBlock *>(workResult_extra[1]);
+        ImageBlock *result_multiChainPerturbation = static_cast<ImageBlock *>(workResult_extra[2]);
+        ImageBlock *result_causticPerturbation = static_cast<ImageBlock *>(workResult_extra[3]);
 
         const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
         Path *current = new Path(), *proposed = new Path();
         Spectrum relWeight(0.0f);
 
         result->clear();
-        result_proposal_map->clear();
-        result_acceptance_map->clear();
+        result_bidirectionalMutation->clear();
+        result_lensPerturbation->clear();
+        result_multiChainPerturbation->clear();
+        result_causticPerturbation->clear();
 
         /// Reconstruct the seed path
         m_pathSampler->reconstructPath(wu->getSeed(), m_config.importanceMap, *current);
@@ -140,6 +144,7 @@ public:
         ref<Timer> timer = new Timer();
 
         size_t consecRejections = 0;
+        size_t lastMutatorIdx = 0;
         Float accumulatedWeight = 0;
 
         #if defined(MTS_DEBUG_FP)
@@ -261,21 +266,22 @@ public:
 
                 accumulatedWeight += 1-a;
 
-                // Count proposal
-                Spectrum unit = Spectrum(0.01f);
-                result_proposal_map->put(proposed->getSamplePosition(), &unit[0]);
-
                 /* Accept with probability 'a' */
                 if (a == 1 || m_sampler->next1D() < a) {
                     current->release(muRec.l, muRec.m+1, *m_pool);
                     Spectrum value = relWeight * accumulatedWeight;
-                    if (!value.isZero())
+                    if (!value.isZero()) {
                         result->put(current->getSamplePosition(), &value[0]);
-
-                    // Count acceptance
-                    Spectrum unit = Spectrum(0.01f);
-                    result_acceptance_map->put(proposed->getSamplePosition(), &unit[0]);
-
+                        if (mutatorIdx == 0)
+                            result_bidirectionalMutation->put(current->getSamplePosition(), &value[0]);
+                        else if (mutatorIdx == 1)
+                            result_lensPerturbation->put(current->getSamplePosition(), &value[0]);
+                        else if (mutatorIdx == 2)
+                            result_multiChainPerturbation->put(current->getSamplePosition(), &value[0]);
+                        else if (mutatorIdx == 3)
+                            result_causticPerturbation->put(current->getSamplePosition(), &value[0]);
+                    }
+                
                     /* The mutation was accepted */
                     std::swap(current, proposed);
                     relWeight = current->getRelativeWeight();
@@ -292,16 +298,21 @@ public:
                     if (a > 0) {
                         Spectrum value = proposed->getRelativeWeight() * a;
                         result->put(proposed->getSamplePosition(), &value[0]);
+                        if (mutatorIdx == 0)
+                            result_bidirectionalMutation->put(proposed->getSamplePosition(), &value[0]);
+                        else if (mutatorIdx == 1)
+                            result_lensPerturbation->put(proposed->getSamplePosition(), &value[0]);
+                        else if (mutatorIdx == 2)
+                            result_multiChainPerturbation->put(proposed->getSamplePosition(), &value[0]);
+                        else if (mutatorIdx == 3)
+                            result_causticPerturbation->put(proposed->getSamplePosition(), &value[0]);
                     }
                 }
             } else {
                 accumulatedWeight += 1;
                 consecRejections++;
-
-                // Count proposal
-                Spectrum unit = Spectrum(0.01f);
-                result_proposal_map->put(current->getSamplePosition(), &unit[0]);
             }
+            lastMutatorIdx = mutatorIdx;
         }
         #if defined(MTS_BD_DEBUG)
             if (consecRejections == m_config.nMutations)
@@ -312,6 +323,14 @@ public:
         if (accumulatedWeight > 0) {
             Spectrum value = relWeight * accumulatedWeight;
             result->put(current->getSamplePosition(), &value[0]);
+            if (lastMutatorIdx == 0)
+                result_bidirectionalMutation->put(current->getSamplePosition(), &value[0]);
+            else if (lastMutatorIdx == 1)
+                result_lensPerturbation->put(current->getSamplePosition(), &value[0]);
+            else if (lastMutatorIdx == 2)
+                result_multiChainPerturbation->put(current->getSamplePosition(), &value[0]);
+            else if (lastMutatorIdx == 3)
+                result_causticPerturbation->put(current->getSamplePosition(), &value[0]);
         }
 
         #if defined(MTS_DEBUG_FP)
@@ -394,24 +413,39 @@ void MLTProcess::develop() {
         if (direct)
             value += direct[i];
         target[i] = value;
+        for (int j = 0; j < 4; ++j) {
+            Spectrum *accum_extra = (Spectrum *) m_accum_extra[j]->getBitmap()->getData();
+            accum_extra[i] = accum_extra[i] * correction;
+        }
     }
 
     Log(EInfo, "Develop extra film");
     const Scene* scene = m_job->getScene();
     fs::path P = scene->getDestinationFile();
-    fs::path proposed_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_proposal_map" + P.extension().string());
-    fs::path accept_map_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_acceptance_map" + P.extension().string());
-    m_film->setDestinationFile(proposed_map_path, scene->getBlockSize());
+    fs::path extra_0_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_0" + P.extension().string());
+    fs::path extra_1_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_1" + P.extension().string());
+    fs::path extra_2_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_2" + P.extension().string());
+    fs::path extra_3_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_3" + P.extension().string());
+    fs::path extra_4_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_4" + P.extension().string());
+    m_film->setDestinationFile(extra_0_path, scene->getBlockSize());
     m_film->setBitmap(m_accum_extra[0]->getBitmap());
     m_film->develop(scene, 0.f);
-    m_film->setDestinationFile(accept_map_path, scene->getBlockSize());
+    m_film->setDestinationFile(extra_1_path, scene->getBlockSize());
     m_film->setBitmap(m_accum_extra[1]->getBitmap());
     m_film->develop(scene, 0.f);
-    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
+    m_film->setDestinationFile(extra_2_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[2]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(extra_3_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[3]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(extra_4_path, scene->getBlockSize());
+    m_film->setBitmap(m_directImage);
+    m_film->develop(scene, 0.f);
 
+    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
     m_film->setBitmap(m_developBuffer);
     m_refreshTimer->reset();
-
     m_queue->signalRefresh(m_job);
 }
 
@@ -419,9 +453,9 @@ void MLTProcess::mlt_processResult(const WorkResult *wr, WorkResult **wr_ex, boo
     LockGuard lock(m_resultMutex);
     const ImageBlock *result = static_cast<const ImageBlock *>(wr);
     m_accum->put(result);
-    for (int i = 0; i < 2; ++i) {
-        const ImageBlock *temp_result = static_cast<const ImageBlock *>(wr_ex[i]);
-        m_accum_extra[i]->put(temp_result);
+    for (int i = 0; i < 4; ++i) {
+        const ImageBlock *extra_result = static_cast<const ImageBlock *>(wr_ex[i]);
+        m_accum_extra[i]->put(extra_result);
     }
     m_progress->update(++m_resultCounter);
     m_refreshTimeout = std::min(2000U, m_refreshTimeout * 2);
@@ -458,7 +492,7 @@ void MLTProcess::bindResource(const std::string &name, int id) {
         m_progress = new ProgressReporter("Rendering", m_config.workUnits, m_job);
         m_accum = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
         m_accum->clear();
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 4; ++i) {
             m_accum_extra[i] = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
             m_accum_extra[i]->clear();
         }
