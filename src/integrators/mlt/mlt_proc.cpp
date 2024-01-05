@@ -439,9 +439,6 @@ void MLTProcess::develop() {
     m_film->setDestinationFile(extra_3_path, scene->getBlockSize());
     m_film->setBitmap(m_accum_extra[3]->getBitmap());
     m_film->develop(scene, 0.f);
-    m_film->setDestinationFile(extra_4_path, scene->getBlockSize());
-    m_film->setBitmap(m_directImage);
-    m_film->develop(scene, 0.f);
 
     m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
     m_film->setBitmap(m_developBuffer);
