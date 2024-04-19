@@ -426,7 +426,6 @@ void MLTProcess::develop() {
     fs::path extra_1_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_1" + P.extension().string());
     fs::path extra_2_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_2" + P.extension().string());
     fs::path extra_3_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_3" + P.extension().string());
-    fs::path extra_4_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_4" + P.extension().string());
     m_film->setDestinationFile(extra_0_path, scene->getBlockSize());
     m_film->setBitmap(m_accum_extra[0]->getBitmap());
     m_film->develop(scene, 0.f);

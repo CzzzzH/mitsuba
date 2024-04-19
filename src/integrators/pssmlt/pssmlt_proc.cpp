@@ -20,6 +20,7 @@
 #include <mitsuba/bidir/path.h>
 #include "pssmlt_proc.h"
 #include "pssmlt_sampler.h"
+#include <boost/filesystem.hpp>
 
 MTS_NAMESPACE_BEGIN
 
@@ -85,8 +86,14 @@ public:
             m_config.rrDepth, m_config.separateDirect, m_config.directSampling);
     }
 
-    void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {
+    void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {}
+
+    void mlt_process(const WorkUnit *workUnit, WorkResult *workResult, WorkResult **workResult_extra, const bool &stop) {
+
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
+        ImageBlock *result_largeStep = static_cast<ImageBlock *>(workResult_extra[0]);
+        ImageBlock *result_smallStep = static_cast<ImageBlock *>(workResult_extra[1]);
+
         const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
         const PathSeed &seed = wu->getSeed();
         SplatList *current = new SplatList(), *proposed = new SplatList();
@@ -104,7 +111,10 @@ public:
         m_rplSampler->setSampleIndex(seed.sampleIndex);
 
         m_pathSampler->sampleSplats(Point2i(-1), *current);
+
         result->clear();
+        result_largeStep->clear();
+        result_smallStep->clear();
 
         ref<Random> random = m_origSampler->getRandom();
         m_sensorSampler->setRandom(random);
@@ -130,6 +140,7 @@ public:
         ref<Timer> timer = new Timer();
 
         /* MLT main loop */
+        bool globalLargeStep = false;
         Float cumulativeWeight = 0;
         current->normalize(m_config.importanceMap);
         for (uint64_t mutationCtr=0; mutationCtr<m_config.nMutations && !stop; ++mutationCtr) {
@@ -183,8 +194,11 @@ public:
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
                     Spectrum value = current->getValue(k) * cumulativeWeight;
-                    if (!value.isZero())
+                    if (!value.isZero()) {
                         result->put(current->getPosition(k), &value[0]);
+                        if (largeStep) result_largeStep->put(current->getPosition(k), &value[0]);
+                        else result_smallStep->put(current->getPosition(k), &value[0]);
+                    }
                 }
 
                 cumulativeWeight = proposedWeight;
@@ -205,8 +219,11 @@ public:
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
                     Spectrum value = proposed->getValue(k) * proposedWeight;
-                    if (!value.isZero())
+                    if (!value.isZero()) {
                         result->put(proposed->getPosition(k), &value[0]);
+                        if (largeStep) result_largeStep->put(proposed->getPosition(k), &value[0]);
+                        else result_smallStep->put(proposed->getPosition(k), &value[0]);
+                    }
                 }
 
                 m_sensorSampler->reject();
@@ -218,15 +235,18 @@ public:
                 else
                     smallStepRatio.incrementBase(1);
             }
+            globalLargeStep = largeStep;
         }
 
         /* Perform the last splat */
         for (size_t k=0; k<current->size(); ++k) {
             Spectrum value = current->getValue(k) * cumulativeWeight;
-            if (!value.isZero())
+            if (!value.isZero()) {
                 result->put(current->getPosition(k), &value[0]);
+                if (globalLargeStep) result_largeStep->put(current->getPosition(k), &value[0]);
+                else result_smallStep->put(current->getPosition(k), &value[0]);
+            }
         }
-
 
         delete current;
         delete proposed;
@@ -302,17 +322,40 @@ void PSSMLTProcess::develop() {
         if (direct)
             value += direct[i];
         target[i] = value;
+        for (int j = 0; j < 2; ++j) {
+            Spectrum *accum_extra = (Spectrum *) m_accum_extra[j]->getBitmap()->getData();
+            accum_extra[i] = accum_extra[i] * correction;
+        }
     }
+
+    Log(EInfo, "Develop extra film");
+    const Scene* scene = m_job->getScene();
+    fs::path P = scene->getDestinationFile();
+    fs::path extra_0_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_0" + P.extension().string());
+    fs::path extra_1_path = P.parent_path() / boost::filesystem::path(P.stem().string() + "_extra_1" + P.extension().string());
+    m_film->setDestinationFile(extra_0_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[0]->getBitmap());
+    m_film->develop(scene, 0.f);
+    m_film->setDestinationFile(extra_1_path, scene->getBlockSize());
+    m_film->setBitmap(m_accum_extra[1]->getBitmap());
+    m_film->develop(scene, 0.f);
+
+    m_film->setDestinationFile(scene->getDestinationFile(), scene->getBlockSize());
     m_film->setBitmap(m_developBuffer);
     m_refreshTimer->reset();
-
     m_queue->signalRefresh(m_job);
 }
 
-void PSSMLTProcess::processResult(const WorkResult *wr, bool cancelled) {
+void PSSMLTProcess::processResult(const WorkResult *wr, bool cancelled) {}
+
+void PSSMLTProcess::mlt_processResult(const WorkResult *wr, WorkResult **wr_ex, bool cancelled) {
     LockGuard lock(m_resultMutex);
     const ImageBlock *result = static_cast<const ImageBlock *>(wr);
     m_accum->put(result);
+    for (int i = 0; i < 4; ++i) {
+        const ImageBlock *extra_result = static_cast<const ImageBlock *>(wr_ex[i]);
+        m_accum_extra[i]->put(extra_result);
+    }
     m_progress->update(++m_resultCounter);
     m_refreshTimeout = std::min(2000U, m_refreshTimeout * 2);
 
@@ -347,6 +390,10 @@ void PSSMLTProcess::bindResource(const std::string &name, int id) {
         m_progress = new ProgressReporter("Rendering", m_config.workUnits, m_job);
         m_accum = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
         m_accum->clear();
+        for (int i = 0; i < 4; ++i) {
+            m_accum_extra[i] = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
+            m_accum_extra[i]->clear();
+        }
         m_developBuffer = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, m_film->getCropSize());
     }
 }
